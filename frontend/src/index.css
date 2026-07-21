@@ -21,3 +21,8 @@ a {
 #root {
 	min-height: 100vh;
 }
+
+@import "tailwindcss";
+
+/* You can add custom Tailwind layers below */
+
