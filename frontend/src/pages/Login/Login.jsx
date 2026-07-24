@@ -49,7 +49,6 @@ function Login() {
     }
 
     setLoading(true);
-    // Simulate auth API call
     setTimeout(() => {
       setLoading(false);
       navigate('/');
