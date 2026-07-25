@@ -30,7 +30,23 @@ const login = async (req, res, next) => {
   }
 };
 
+const getProfile = async (req, res, next) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      user: req.user
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching profile",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   signup,
-  login
+  login,
+  getProfile
 };
