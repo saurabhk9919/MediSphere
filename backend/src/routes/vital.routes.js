@@ -5,6 +5,8 @@ const authMiddleware = require("../middleware/auth.middleware");
 const authorize = require("../middleware/authorize.middleware");
 
 router.get("/my", authMiddleware, authorize("patient"), vitalController.getPatientVitals);
+router.get("/patient/:patientId/latest", authMiddleware, authorize("doctor"), vitalController.getLatestPatientVitalsForDoctor);
+router.get("/patient/:patientId/history", authMiddleware, authorize("doctor"), vitalController.getPatientVitalsHistory);
 router.get("/patient/:patientId", authMiddleware, authorize("doctor"), vitalController.getPatientVitalsForDoctor);
 router.post("/", authMiddleware, authorize("doctor"), vitalController.recordVitals);
 

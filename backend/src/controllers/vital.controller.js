@@ -111,8 +111,59 @@ const getPatientVitalsForDoctor = async (req, res, next) => {
   }
 };
 
+const getLatestPatientVitalsForDoctor = async (req, res, next) => {
+  try {
+    const result = await vitalService.getLatestPatientVitalsForDoctor(req.params.patientId);
+
+    if (result.notFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: result.vitals
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while retrieving latest patient vitals",
+      error: error.message
+    });
+  }
+};
+
+const getPatientVitalsHistory = async (req, res, next) => {
+  try {
+    const result = await vitalService.getPatientVitalsHistory(req.params.patientId, req.query);
+
+    if (result.notFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      count: result.vitals.length,
+      data: result.vitals
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while retrieving patient vitals history",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   recordVitals,
   getPatientVitals,
-  getPatientVitalsForDoctor
+  getPatientVitalsForDoctor,
+  getLatestPatientVitalsForDoctor,
+  getPatientVitalsHistory
 };
