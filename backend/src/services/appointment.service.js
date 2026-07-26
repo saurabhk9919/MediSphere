@@ -145,6 +145,8 @@ class AppointmentService {
         a.status,
         u.id AS "patientId",
         u.full_name AS "patientFullName",
+        u.email AS "patientEmail",
+        p.phone AS "patientPhone",
         p.age AS "patientAge",
         p.gender AS "patientGender",
         p.blood_group AS "patientBloodGroup"
@@ -179,6 +181,8 @@ class AppointmentService {
         patient: {
           id: row.patientId,
           fullName: row.patientFullName,
+          email: row.patientEmail,
+          phone: row.patientPhone,
           age: row.patientAge,
           gender: row.patientGender,
           bloodGroup: row.patientBloodGroup

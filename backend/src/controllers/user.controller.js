@@ -71,7 +71,30 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+const getUserProfileById = async (req, res, next) => {
+  try {
+    const profile = await userService.getProfile(req.params.id);
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        message: "User profile not found"
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      data: profile
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while retrieving user profile",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getProfile,
-  updateProfile
+  updateProfile,
+  getUserProfileById
 };
