@@ -114,9 +114,12 @@ class VitalService {
         v.heart_rate AS "heartRate",
         v.spo2,
         v.body_temperature AS "temperature",
-        v.captured_at AS "recordedAt"
+        v.captured_at AS "recordedAt",
+        u.full_name AS "doctorFullName"
       FROM vitals v
       INNER JOIN appointments a ON v.appointment_id = a.id
+      INNER JOIN doctors d ON a.doctor_id = d.id
+      INNER JOIN users u ON d.user_id = u.id
       WHERE a.patient_id = $1
       ORDER BY v.captured_at DESC;
     `;
@@ -127,7 +130,10 @@ class VitalService {
       heartRate: row.heartRate,
       spo2: row.spo2,
       temperature: row.temperature,
-      recordedAt: row.recordedAt
+      recordedAt: row.recordedAt,
+      doctor: {
+        fullName: row.doctorFullName
+      }
     }));
 
     return { success: true, vitals: mappedVitals };

@@ -109,6 +109,7 @@ const AppRoutes = () => {
         <Route path="appointments" element={<DoctorAppointments />} />
         <Route path="prescriptions" element={<DoctorPrescriptions />} />
         <Route path="patient-vitals" element={<DoctorPatientVitals />} />
+        <Route path="patients/:patientId/vitals" element={<DoctorPatientVitals />} />
         <Route path="*" element={<Navigate to="dashboard" replace />} />
       </Route>
 
