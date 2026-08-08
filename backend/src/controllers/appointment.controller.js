@@ -35,7 +35,7 @@ const bookAppointment = async (req, res, next) => {
 
     // Call service to book appointment
     const appointment = await appointmentService.bookAppointment(req.user.userId, req.body);
-    
+
     if (!appointment) {
       return res.status(404).json({
         success: false,
@@ -203,10 +203,85 @@ const cancelAppointment = async (req, res, next) => {
   }
 };
 
+/**
+ * Handle request to save consultation vitals on an appointment.
+ */
+const updateConsultationVitals = async (req, res, next) => {
+  try {
+    const appointmentId = req.params.id;
+    const { heartRate, spo2, temperature } = req.body;
+
+    if (heartRate === undefined || heartRate === null) {
+      return res.status(400).json({ success: false, message: "heartRate is required" });
+    }
+    if (spo2 === undefined || spo2 === null) {
+      return res.status(400).json({ success: false, message: "spo2 is required" });
+    }
+    if (temperature === undefined || temperature === null) {
+      return res.status(400).json({ success: false, message: "temperature is required" });
+    }
+
+    const result = await appointmentService.updateConsultationVitals(req.user.userId, appointmentId, {
+      heartRate: parseInt(heartRate, 10),
+      spo2: parseInt(spo2, 10),
+      temperature: parseFloat(temperature)
+    });
+
+    if (result.notFound) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+    if (result.forbidden) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Consultation vitals updated successfully",
+      data: result.appointment
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while updating consultation vitals",
+      error: error.message
+    });
+  }
+};
+/**
+ * Handle request to hide an appointment from doctor's view.
+ */
+const hideAppointmentFromDoctor = async (req, res, next) => {
+  try {
+    const appointmentId = req.params.id;
+    const result = await appointmentService.hideAppointmentFromDoctor(req.user.userId, appointmentId);
+
+    if (result.notFound) {
+      return res.status(404).json({ success: false, message: "Appointment not found" });
+    }
+    if (result.forbidden) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Appointment hidden from dashboard successfully",
+      data: result.appointment
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while hiding appointment",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   bookAppointment,
   getPatientAppointments,
   getDoctorAppointments,
   updateAppointmentStatus,
-  cancelAppointment
+  cancelAppointment,
+  updateConsultationVitals,
+  hideAppointmentFromDoctor
 };

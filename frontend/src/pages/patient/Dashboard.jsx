@@ -176,13 +176,12 @@ const Dashboard = () => {
                     </p>
                   </div>
                   <span
-                    className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase ${
-                      latestAppt.status === 'Scheduled'
-                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                        : latestAppt.status === 'Cancelled'
+                    className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase ${latestAppt.status === 'Scheduled'
+                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                      : latestAppt.status === 'Cancelled'
                         ? 'bg-rose-50 text-rose-600 border border-rose-100'
                         : 'bg-slate-100 text-slate-600 border border-slate-200'
-                    }`}
+                      }`}
                   >
                     {latestAppt.status}
                   </span>

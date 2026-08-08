@@ -149,6 +149,17 @@ class UserService {
     }
     return this.getProfile(userId);
   }
+
+  async updatePatientDeviceSource(patientId, deviceSource) {
+    const query = `
+      UPDATE patients
+      SET device_source = $1
+      WHERE id = $2 OR user_id = $2
+      RETURNING *;
+    `;
+    const result = await pool.query(query, [deviceSource, patientId]);
+    return result.rows[0];
+  }
 }
 
 module.exports = new UserService();

@@ -24,3 +24,18 @@ export const updateAppointmentStatus = async (appointmentId, status) => {
   const response = await api.patch(`/appointments/${appointmentId}/status`, { status });
   return response.data;
 };
+
+export const updateConsultationVitals = async (appointmentId, vitalsData) => {
+  const response = await api.put(`/appointments/${appointmentId}/consultation-vitals`, vitalsData);
+  return response.data;
+};
+
+export const rescheduleAppointment = async (appointmentId, data) => {
+  const response = await api.post(`/appointments/${appointmentId}/reschedule`, data);
+  return response.data;
+};
+
+export const hideAppointmentFromDoctor = async (appointmentId) => {
+  const response = await api.patch(`/appointments/${appointmentId}/hide`);
+  return response.data;
+};

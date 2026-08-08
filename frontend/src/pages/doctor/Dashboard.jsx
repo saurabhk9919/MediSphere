@@ -52,9 +52,9 @@ const Dashboard = () => {
   const todaysAppointments = appointments.filter(
     (a) => a.appointmentDate === todayStr
   );
-  
+
   const todaysAppointmentsCount = todaysAppointments.length;
-  
+
   const scheduledAppointmentsCount = appointments.filter(
     (a) => a.status === 'Scheduled'
   ).length;
@@ -268,21 +268,6 @@ const Dashboard = () => {
                 <div className="text-xs font-bold text-slate-800">Create Prescription</div>
                 <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
                   Draft patient diagnoses and advice
-                </div>
-              </div>
-            </Link>
-
-            <Link
-              to="/doctor/patient-vitals"
-              className="flex items-center gap-3 p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100/70 transition-all duration-200 group"
-            >
-              <span className="text-xl p-2 bg-blue-50 text-blue-600 rounded-lg group-hover:scale-105 transition-transform">
-                ❤️
-              </span>
-              <div>
-                <div className="text-xs font-bold text-slate-800">Patient Vitals</div>
-                <div className="text-[10px] text-slate-400 font-semibold mt-0.5">
-                  Monitor and record user parameters
                 </div>
               </div>
             </Link>

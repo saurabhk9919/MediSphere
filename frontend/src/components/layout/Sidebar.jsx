@@ -28,7 +28,6 @@ const Sidebar = ({ isCollapsed, onToggleCollapse, isMobileOpen, onCloseMobile, r
     { name: 'Patients', path: '/doctor/patients', icon: Users },
     { name: 'Appointments', path: '/doctor/appointments', icon: Calendar },
     { name: 'Prescriptions', path: '/doctor/prescriptions', icon: FileText },
-    { name: 'Patient Vitals', path: '/doctor/patient-vitals', icon: Activity },
   ];
 
   const menuItems = role === 'doctor' ? doctorMenuItems : patientMenuItems;

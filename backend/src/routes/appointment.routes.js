@@ -10,8 +10,14 @@ router.get("/my", authMiddleware, authorize("patient"), appointmentController.ge
 // GET /api/appointments/doctor - Get all appointments assigned to the authenticated doctor
 router.get("/doctor", authMiddleware, authorize("doctor"), appointmentController.getDoctorAppointments);
 
+// PATCH /api/appointments/:id/hide - Hide appointment from doctor's list (restricted to doctor role)
+router.patch("/:id/hide", authMiddleware, authorize("doctor"), appointmentController.hideAppointmentFromDoctor);
+
 // PATCH /api/appointments/:id/status - Update appointment status (restricted to doctor role)
 router.patch("/:id/status", authMiddleware, authorize("doctor"), appointmentController.updateAppointmentStatus);
+
+// PUT /api/appointments/:id/consultation-vitals - Update consultation vitals (restricted to doctor role)
+router.put("/:id/consultation-vitals", authMiddleware, authorize("doctor"), appointmentController.updateConsultationVitals);
 
 // PATCH /api/appointments/:id/cancel - Cancel appointment status (restricted to patient role)
 router.patch("/:id/cancel", authMiddleware, authorize("patient"), appointmentController.cancelAppointment);

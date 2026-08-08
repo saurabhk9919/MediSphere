@@ -13,12 +13,22 @@ class AppointmentService {
    * @returns {Promise<Object|null>} Created appointment object, `{ conflict: true }`, or null if doctor is not found.
    */
   async bookAppointment(userId, appointmentData) {
-    const { doctorId, appointmentDate, appointmentTime, reason } = appointmentData;
+    const {
+      doctorId,
+      appointmentDate,
+      appointmentTime,
+      reason,
+      preConsultationHeartRate,
+      preConsultationSpO2,
+      preConsultationTemperature,
+      preConsultationRecordedAt,
+      preConsultationSource
+    } = appointmentData;
 
     // 1. Fetch patient's DB primary key 'id' using their user_id
     const patientQuery = "SELECT id FROM patients WHERE user_id = $1;";
     const patientResult = await pool.query(patientQuery, [userId]);
-    
+
     if (patientResult.rows.length === 0) {
       throw new Error("Logged-in user does not have a patient profile.");
     }
@@ -28,7 +38,7 @@ class AppointmentService {
     let doctorIdDb = null;
     const doctorUserQuery = "SELECT id FROM doctors WHERE user_id = $1;";
     const doctorUserResult = await pool.query(doctorUserQuery, [doctorId]);
-    
+
     if (doctorUserResult.rows.length > 0) {
       doctorIdDb = doctorUserResult.rows[0].id;
     } else {
@@ -56,10 +66,14 @@ class AppointmentService {
       return { conflict: true };
     }
 
-    // 5. Insert appointment record
+    // 5. Insert appointment record with pre-consultation vitals
     const insertQuery = `
-      INSERT INTO appointments (patient_id, doctor_id, appointment_date, status, reason)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO appointments (
+        patient_id, doctor_id, appointment_date, status, reason,
+        pre_consultation_heart_rate, pre_consultation_spo2, pre_consultation_temperature,
+        pre_consultation_recorded_at, pre_consultation_source
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *;
     `;
     const insertResult = await pool.query(insertQuery, [
@@ -67,7 +81,12 @@ class AppointmentService {
       doctorIdDb,
       appointmentTimestamp,
       "Scheduled",
-      reason
+      reason,
+      preConsultationHeartRate || null,
+      preConsultationSpO2 || null,
+      preConsultationTemperature || null,
+      preConsultationRecordedAt || null,
+      preConsultationSource || null
     ]);
 
     return insertResult.rows[0];
@@ -87,6 +106,11 @@ class AppointmentService {
         a.appointment_date,
         a.reason,
         a.status,
+        a.pre_consultation_heart_rate AS "preConsultationHeartRate",
+        a.pre_consultation_spo2 AS "preConsultationSpO2",
+        a.pre_consultation_temperature AS "preConsultationTemperature",
+        a.pre_consultation_recorded_at AS "preConsultationRecordedAt",
+        a.pre_consultation_source AS "preConsultationSource",
         u.id AS "doctorId",
         u.full_name AS "doctorFullName",
         d.specialization AS "doctorSpecialization",
@@ -103,7 +127,7 @@ class AppointmentService {
 
     return result.rows.map(row => {
       const dateObj = new Date(row.appointment_date);
-      
+
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const date = String(dateObj.getDate()).padStart(2, '0');
@@ -124,7 +148,14 @@ class AppointmentService {
           fullName: row.doctorFullName,
           specialization: row.doctorSpecialization,
           consultationFee: row.doctorConsultationFee
-        }
+        },
+        preConsultationVitals: row.preConsultationHeartRate !== null ? {
+          heartRate: row.preConsultationHeartRate,
+          spo2: row.preConsultationSpO2,
+          temperature: parseFloat(row.preConsultationTemperature),
+          recordedAt: row.preConsultationRecordedAt,
+          source: row.preConsultationSource
+        } : null
       };
     });
   }
@@ -143,17 +174,39 @@ class AppointmentService {
         a.appointment_date,
         a.reason,
         a.status,
+        a.consultation_heart_rate AS "consultationHeartRate",
+        a.consultation_spo2 AS "consultationSpO2",
+        a.consultation_temperature AS "consultationTemperature",
+        a.pre_consultation_heart_rate AS "preConsultationHeartRate",
+        a.pre_consultation_spo2 AS "preConsultationSpO2",
+        a.pre_consultation_temperature AS "preConsultationTemperature",
+        a.pre_consultation_recorded_at AS "preConsultationRecordedAt",
+        a.pre_consultation_source AS "preConsultationSource",
+        a.hidden_from_doctor AS "hiddenFromDoctor",
         u.id AS "patientId",
         u.full_name AS "patientFullName",
         u.email AS "patientEmail",
         p.phone AS "patientPhone",
         p.age AS "patientAge",
         p.gender AS "patientGender",
-        p.blood_group AS "patientBloodGroup"
+        p.blood_group AS "patientBloodGroup",
+        p.device_source AS "patientDeviceSource",
+        v.heart_rate AS "vitalHeartRate",
+        v.spo2 AS "vitalSpO2",
+        v.body_temperature AS "vitalTemperature",
+        v.captured_at AS "vitalRecordedAt"
       FROM appointments a
       INNER JOIN patients p ON a.patient_id = p.id
       INNER JOIN users u ON p.user_id = u.id
       INNER JOIN doctors d ON a.doctor_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT heart_rate, spo2, body_temperature, captured_at
+        FROM vitals vt
+        INNER JOIN appointments appt ON vt.appointment_id = appt.id
+        WHERE appt.patient_id = p.id
+        ORDER BY vt.captured_at DESC
+        LIMIT 1
+      ) v ON true
       WHERE d.user_id = $1
       ORDER BY a.appointment_date DESC;
     `;
@@ -162,7 +215,7 @@ class AppointmentService {
 
     return result.rows.map(row => {
       const dateObj = new Date(row.appointment_date);
-      
+
       const year = dateObj.getFullYear();
       const month = String(dateObj.getMonth() + 1).padStart(2, '0');
       const date = String(dateObj.getDate()).padStart(2, '0');
@@ -178,6 +231,7 @@ class AppointmentService {
         appointmentTime,
         reason: row.reason,
         status: row.status,
+        hiddenFromDoctor: row.hiddenFromDoctor,
         patient: {
           id: row.patientId,
           fullName: row.patientFullName,
@@ -185,8 +239,27 @@ class AppointmentService {
           phone: row.patientPhone,
           age: row.patientAge,
           gender: row.patientGender,
-          bloodGroup: row.patientBloodGroup
-        }
+          bloodGroup: row.patientBloodGroup,
+          deviceSource: row.patientDeviceSource
+        },
+        latestVital: row.vitalHeartRate !== null ? {
+          heartRate: row.vitalHeartRate,
+          spo2: row.vitalSpO2,
+          temperature: row.vitalTemperature,
+          recordedAt: row.vitalRecordedAt
+        } : null,
+        consultationVitals: row.consultationHeartRate !== null ? {
+          heartRate: row.consultationHeartRate,
+          spo2: row.consultationSpO2,
+          temperature: parseFloat(row.consultationTemperature)
+        } : null,
+        preConsultationVitals: row.preConsultationHeartRate !== null ? {
+          heartRate: row.preConsultationHeartRate,
+          spo2: row.preConsultationSpO2,
+          temperature: parseFloat(row.preConsultationTemperature),
+          recordedAt: row.preConsultationRecordedAt,
+          source: row.preConsultationSource
+        } : null
       };
     });
   }
@@ -205,7 +278,7 @@ class AppointmentService {
     // 1. Fetch the doctor's DB primary key 'id' using user_id
     const doctorQuery = "SELECT id FROM doctors WHERE user_id = $1;";
     const doctorResult = await pool.query(doctorQuery, [userId]);
-    
+
     if (doctorResult.rows.length === 0) {
       return { forbidden: true };
     }
@@ -283,6 +356,101 @@ class AppointmentService {
     const updateQuery = `
       UPDATE appointments
       SET status = 'Cancelled'
+      WHERE id = $1
+      RETURNING *;
+    `;
+    const updateResult = await pool.query(updateQuery, [appointmentId]);
+    return { success: true, appointment: updateResult.rows[0] };
+  }
+
+  /**
+   * Update consultation vitals on an appointment.
+   * Restricted to the assigned doctor.
+   * 
+   * @param {number|string} userId - User ID of the logged-in doctor.
+   * @param {number|string} appointmentId - ID of the appointment.
+   * @param {Object} vitalsData - Consultation vitals.
+   * @param {number} vitalsData.heartRate
+   * @param {number} vitalsData.spo2
+   * @param {number} vitalsData.temperature
+   * @returns {Promise<Object>} Update result.
+   */
+  async updateConsultationVitals(userId, appointmentId, vitalsData) {
+    const { heartRate, spo2, temperature } = vitalsData;
+
+    // 1. Fetch the doctor's DB primary key 'id' using user_id
+    const doctorQuery = "SELECT id FROM doctors WHERE user_id = $1;";
+    const doctorResult = await pool.query(doctorQuery, [userId]);
+
+    if (doctorResult.rows.length === 0) {
+      return { forbidden: true };
+    }
+    const doctorIdDb = doctorResult.rows[0].id;
+
+    // 2. Fetch the appointment to verify existence and doctor ownership
+    const appointmentQuery = "SELECT * FROM appointments WHERE id = $1;";
+    const appointmentResult = await pool.query(appointmentQuery, [appointmentId]);
+
+    if (appointmentResult.rows.length === 0) {
+      return { notFound: true };
+    }
+    const appointment = appointmentResult.rows[0];
+
+    // 3. Verify ownership
+    if (appointment.doctor_id !== doctorIdDb) {
+      return { forbidden: true };
+    }
+
+    // 4. Update consultation vitals columns
+    const updateQuery = `
+      UPDATE appointments
+      SET 
+        consultation_heart_rate = $1,
+        consultation_spo2 = $2,
+        consultation_temperature = $3
+      WHERE id = $4
+      RETURNING *;
+    `;
+    const updateResult = await pool.query(updateQuery, [heartRate, spo2, temperature, appointmentId]);
+    return { success: true, appointment: updateResult.rows[0] };
+  }
+
+  /**
+   * Hide an appointment from the doctor's view.
+   * Restricted to the assigned doctor.
+   * 
+   * @param {number|string} userId - User ID of the logged-in doctor.
+   * @param {number|string} appointmentId - ID of the appointment.
+   * @returns {Promise<Object>} Result metadata and updated appointment.
+   */
+  async hideAppointmentFromDoctor(userId, appointmentId) {
+    // 1. Fetch the doctor's DB primary key 'id' using user_id
+    const doctorQuery = "SELECT id FROM doctors WHERE user_id = $1;";
+    const doctorResult = await pool.query(doctorQuery, [userId]);
+
+    if (doctorResult.rows.length === 0) {
+      return { forbidden: true };
+    }
+    const doctorIdDb = doctorResult.rows[0].id;
+
+    // 2. Fetch the appointment to verify existence and doctor ownership
+    const appointmentQuery = "SELECT * FROM appointments WHERE id = $1;";
+    const appointmentResult = await pool.query(appointmentQuery, [appointmentId]);
+
+    if (appointmentResult.rows.length === 0) {
+      return { notFound: true };
+    }
+    const appointment = appointmentResult.rows[0];
+
+    // 3. Verify ownership
+    if (appointment.doctor_id !== doctorIdDb) {
+      return { forbidden: true };
+    }
+
+    // 4. Update hidden_from_doctor column to true
+    const updateQuery = `
+      UPDATE appointments
+      SET hidden_from_doctor = true
       WHERE id = $1
       RETURNING *;
     `;

@@ -17,7 +17,7 @@ import DoctorDashboard from '../pages/doctor/Dashboard';
 import DoctorPatients from '../pages/doctor/Patients';
 import DoctorAppointments from '../pages/doctor/Appointments';
 import DoctorPrescriptions from '../pages/doctor/Prescriptions';
-import DoctorPatientVitals from '../pages/doctor/PatientVitals';
+import DoctorConsultation from '../pages/doctor/Consultation';
 
 import Loader from '../components/common/Loader';
 import { ROLES } from '../utils/constants';
@@ -106,10 +106,10 @@ const AppRoutes = () => {
       >
         <Route path="dashboard" element={<DoctorDashboard />} />
         <Route path="patients" element={<DoctorPatients />} />
+        <Route path="patients/:patientId" element={<DoctorPatients />} />
         <Route path="appointments" element={<DoctorAppointments />} />
         <Route path="prescriptions" element={<DoctorPrescriptions />} />
-        <Route path="patient-vitals" element={<DoctorPatientVitals />} />
-        <Route path="patients/:patientId/vitals" element={<DoctorPatientVitals />} />
+        <Route path="consultation/:appointmentId" element={<DoctorConsultation />} />
         <Route path="*" element={<Navigate to="dashboard" replace />} />
       </Route>
 

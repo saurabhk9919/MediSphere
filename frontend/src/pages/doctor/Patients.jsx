@@ -325,9 +325,9 @@ const Patients = () => {
 
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs">
               <h3 className="text-sm font-bold text-slate-800 mb-4">Quick Actions</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Link
-                  to="/doctor/appointments"
+                  to={`/doctor/appointments?patientId=${patientId}`}
                   className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition text-center group cursor-pointer"
                 >
                   <span className="text-xl mb-1 group-hover:scale-105 transition-transform">
@@ -344,16 +344,6 @@ const Patients = () => {
                     💊
                   </span>
                   <span className="text-xs font-bold text-slate-700">Create Prescription</span>
-                </Link>
-
-                <Link
-                  to="/doctor/patient-vitals"
-                  className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-100 bg-slate-50 hover:bg-slate-100 transition text-center group cursor-pointer"
-                >
-                  <span className="text-xl mb-1 group-hover:scale-105 transition-transform">
-                    ❤️
-                  </span>
-                  <span className="text-xs font-bold text-slate-700">Log Patient Vitals</span>
                 </Link>
               </div>
             </div>
@@ -465,10 +455,15 @@ const Patients = () => {
                 </div>
               </div>
 
-              <div className="pt-6">
-                <Link to={`/doctor/patients/${patient.id}`}>
+              <div className="pt-6 grid grid-cols-2 gap-2">
+                <Link to={`/doctor/patients/${patient.id}`} className="w-full">
+                  <Button variant="outline" fullWidth>
+                    View Profile
+                  </Button>
+                </Link>
+                <Link to={`/doctor/appointments?patientId=${patient.id}`} className="w-full">
                   <Button variant="primary" fullWidth>
-                    View Patient
+                    Appointments
                   </Button>
                 </Link>
               </div>

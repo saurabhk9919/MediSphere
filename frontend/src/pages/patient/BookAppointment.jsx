@@ -23,17 +23,63 @@ const BookingForm = ({ doctor, onClose, onBookingSuccess }) => {
       reason: '',
     },
   });
+  
   const [submitting, setSubmitting] = useState(false);
+  const [snapshotOption, setSnapshotOption] = useState('skip');
+  const [capturedVitals, setCapturedVitals] = useState(null);
+  const [capturing, setCapturing] = useState(false);
+  const [deviceError, setDeviceError] = useState(null);
+
+  const handleOptionChange = (option) => {
+    setSnapshotOption(option);
+    setCapturedVitals(null);
+    setDeviceError(null);
+  };
+
+  const handleCaptureReading = () => {
+    setCapturing(true);
+    setCapturedVitals(null);
+    setDeviceError(null);
+    const delay = snapshotOption === 'live' ? 1800 : 800;
+    setTimeout(() => {
+      if (snapshotOption === 'live') {
+        setDeviceError('No ESP8266 hardware device detected. Please ensure your device is powered on, connected to the internet, and sending vitals.');
+        toast.error('Hardware device not found.');
+      } else {
+        const hr = Math.floor(Math.random() * 21) + 70; // 70-90
+        const o2 = Math.floor(Math.random() * 5) + 96;  // 96-100
+        const temp = Math.round((Math.random() * 0.8 + 36.4) * 10) / 10; // 36.4-37.2
+        setCapturedVitals({
+          heartRate: hr,
+          spo2: o2,
+          temperature: temp,
+          recordedAt: new Date().toISOString(),
+          source: 'Virtual Medical Device',
+        });
+      }
+      setCapturing(false);
+    }, delay);
+  };
 
   const onSubmit = async (data) => {
     try {
       setSubmitting(true);
-      const res = await bookAppointment({
+      const payload = {
         doctorId: doctor.id,
         appointmentDate: data.appointmentDate,
         appointmentTime: data.appointmentTime,
         reason: data.reason,
-      });
+      };
+
+      if (snapshotOption !== 'skip' && capturedVitals) {
+        payload.preConsultationHeartRate = capturedVitals.heartRate;
+        payload.preConsultationSpO2 = capturedVitals.spo2;
+        payload.preConsultationTemperature = capturedVitals.temperature;
+        payload.preConsultationRecordedAt = capturedVitals.recordedAt;
+        payload.preConsultationSource = capturedVitals.source;
+      }
+
+      const res = await bookAppointment(payload);
 
       if (res && res.success) {
         toast.success(res.message || 'Appointment booked successfully!');
@@ -110,6 +156,128 @@ const BookingForm = ({ doctor, onClose, onBookingSuccess }) => {
           <p className="text-xs text-rose-600 font-medium mt-0.5">
             ⚠ {errors.reason.message}
           </p>
+        )}
+      </div>
+
+      {/* Pre-consultation Health Snapshot Section */}
+      <div className="border-t border-slate-100 pt-4 space-y-3">
+        <label className="text-sm font-semibold text-slate-700 block">Health Snapshot (Optional)</label>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className={`flex items-center gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+            snapshotOption === 'skip' ? 'border-blue-500 bg-blue-50/10' : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+          }`}>
+            <input
+              type="radio"
+              name="snapshotOption"
+              value="skip"
+              checked={snapshotOption === 'skip'}
+              onChange={() => handleOptionChange('skip')}
+              className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-slate-750">Skip</span>
+          </label>
+
+          <label className={`flex items-center gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+            snapshotOption === 'live' ? 'border-emerald-500 bg-emerald-50/10' : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+          }`}>
+            <input
+              type="radio"
+              name="snapshotOption"
+              value="live"
+              checked={snapshotOption === 'live'}
+              onChange={() => handleOptionChange('live')}
+              className="w-4 h-4 text-emerald-600 border-slate-300 focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-slate-750">Capture from Live Device</span>
+          </label>
+
+          <label className={`flex items-center gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+            snapshotOption === 'virtual' ? 'border-purple-500 bg-purple-50/10' : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+          }`}>
+            <input
+              type="radio"
+              name="snapshotOption"
+              value="virtual"
+              checked={snapshotOption === 'virtual'}
+              onChange={() => handleOptionChange('virtual')}
+              className="w-4 h-4 text-purple-600 border-slate-300 focus:ring-purple-500 accent-purple-600 cursor-pointer"
+            />
+            <span className="text-xs font-bold text-slate-750">Capture from Virtual Device</span>
+          </label>
+        </div>
+
+        {snapshotOption !== 'skip' && (
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Device Status</div>
+                <div className="text-xs font-bold text-slate-700 mt-1 flex items-center gap-1.5 select-none">
+                  {capturing ? (
+                    <>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                      {snapshotOption === 'live' ? 'Waiting for ESP8266...' : 'Simulating Virtual Device...'}
+                    </>
+                  ) : deviceError ? (
+                    <>
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                      Hardware Connection Failed
+                    </>
+                  ) : capturedVitals ? (
+                    <>
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                      Vitals Captured
+                    </>
+                  ) : (
+                    <>
+                      <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                      Ready to Capture
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={capturing}
+                onClick={handleCaptureReading}
+                className="h-9 text-xs font-bold px-3 shrink-0"
+              >
+                {capturing ? 'Capturing...' : 'Capture Current Reading'}
+              </Button>
+            </div>
+
+            {deviceError && !capturing && (
+              <div className="bg-rose-50/60 text-rose-700 p-3.5 rounded-xl border border-rose-100 text-xs flex items-start gap-2.5 font-medium leading-relaxed">
+                <span className="text-sm shrink-0">⚠️</span>
+                <span>{deviceError}</span>
+              </div>
+            )}
+
+            {capturedVitals && !capturing && (
+              <div className="bg-white p-4 rounded-xl border border-slate-100 grid grid-cols-3 gap-3 text-xs">
+                <div className="text-center p-2.5 bg-rose-50/40 rounded-lg border border-rose-100/30">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase mb-1 select-none">Heart Rate</div>
+                  <div className="font-extrabold text-rose-600 text-sm">❤️ {capturedVitals.heartRate} bpm</div>
+                </div>
+                <div className="text-center p-2.5 bg-blue-50/40 rounded-lg border border-blue-100/30">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase mb-1 select-none">SpO₂</div>
+                  <div className="font-extrabold text-blue-600 text-sm">🩸 {capturedVitals.spo2}%</div>
+                </div>
+                <div className="text-center p-2.5 bg-amber-50/40 rounded-lg border border-amber-100/30">
+                  <div className="text-[10px] text-slate-400 font-bold uppercase mb-1 select-none">Temp</div>
+                  <div className="font-extrabold text-amber-600 text-sm">🌡️ {capturedVitals.temperature}°C</div>
+                </div>
+                <div className="col-span-3 flex justify-between text-[10px] text-slate-400 font-bold px-1 mt-1 select-none">
+                  <span>Source: {capturedVitals.source}</span>
+                  <span>Recorded: Just now</span>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

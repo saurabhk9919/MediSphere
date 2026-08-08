@@ -1,4 +1,6 @@
 const vitalService = require("../services/vital.service");
+const virtualDeviceService = require("../services/virtualDevice.service");
+const userService = require("../services/user.service");
 
 const recordVitals = async (req, res, next) => {
   try {
@@ -160,10 +162,112 @@ const getPatientVitalsHistory = async (req, res, next) => {
   }
 };
 
+const startDeviceSimulation = async (req, res, next) => {
+  try {
+    const { patientId } = req.body;
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: "patientId is required"
+      });
+    }
+
+    const state = virtualDeviceService.start(req.user.userId, patientId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Virtual device simulation started",
+      data: state
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to start virtual device simulation",
+      error: error.message
+    });
+  }
+};
+
+const stopDeviceSimulation = async (req, res, next) => {
+  try {
+    const state = virtualDeviceService.stop();
+    return res.status(200).json({
+      success: true,
+      message: "Virtual device simulation stopped",
+      data: state
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to stop virtual device simulation",
+      error: error.message
+    });
+  }
+};
+
+const getDeviceSimulationStatus = async (req, res, next) => {
+  try {
+    const state = virtualDeviceService.status();
+    return res.status(200).json({
+      success: true,
+      data: state
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get virtual device status",
+      error: error.message
+    });
+  }
+};
+
+const updateDeviceSource = async (req, res, next) => {
+  try {
+    const { patientId, deviceSource } = req.body;
+    if (!patientId || !deviceSource) {
+      return res.status(400).json({
+        success: false,
+        message: "patientId and deviceSource are required"
+      });
+    }
+
+    if (deviceSource !== "LIVE" && deviceSource !== "VIRTUAL") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid deviceSource. Must be LIVE or VIRTUAL"
+      });
+    }
+
+    const patient = await userService.updatePatientDeviceSource(patientId, deviceSource);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Device source updated successfully",
+      data: patient
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update device source",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   recordVitals,
   getPatientVitals,
   getPatientVitalsForDoctor,
   getLatestPatientVitalsForDoctor,
-  getPatientVitalsHistory
+  getPatientVitalsHistory,
+  startDeviceSimulation,
+  stopDeviceSimulation,
+  getDeviceSimulationStatus,
+  updateDeviceSource
 };

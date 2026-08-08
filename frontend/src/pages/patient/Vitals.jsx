@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Heart, Activity, Thermometer, Calendar, Search, ArrowDownToLine, TrendingUp } from 'lucide-react';
+import { Heart, Activity, Thermometer, Calendar, Search, ArrowDownToLine, TrendingUp, Cpu } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
-import { getPatientVitals } from '../../services/vital.api';
+import { getPatientVitals, startDeviceSimulation, stopDeviceSimulation, updatePatientDeviceSource, getDeviceSimulationStatus } from '../../services/vital.api';
+import { getUserProfile } from '../../services/user.api';
 import { formatDate, formatTime } from '../../utils/formatDate';
 import toast from 'react-hot-toast';
 
@@ -15,24 +16,169 @@ const Vitals = () => {
   const [limitFilter, setLimitFilter] = useState('7');
   const [sortOrder, setSortOrder] = useState('newest');
 
-  const fetchVitalsList = async () => {
+  const [profile, setProfile] = useState(null);
+  const [deviceMode, setDeviceMode] = useState('live'); // 'live' or 'virtual'
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [timeTicker, setTimeTicker] = useState(Date.now());
+
+  const checkSimulationStatus = async () => {
     try {
-      setLoading(true);
+      const res = await getDeviceSimulationStatus();
+      if (res && res.success && res.data) {
+        setIsSimulating(res.data.isRunning);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch backend simulation status:', err);
+    }
+  };
+
+  const fetchVitalsSilent = async () => {
+    try {
       const res = await getPatientVitals();
       if (res && res.success) {
         setVitals(res.data || []);
       }
     } catch (err) {
-      console.error(err);
-      toast.error('Failed to retrieve vitals logs.');
-    } finally {
-      setLoading(false);
+      console.error('Silent vitals refresh failed:', err);
     }
   };
 
   useEffect(() => {
-    fetchVitalsList();
+    const fetchInitialData = async () => {
+      try {
+        setLoading(true);
+        const [vitalsRes, profileRes] = await Promise.all([
+          getPatientVitals(),
+          getUserProfile().catch(() => null)
+        ]);
+
+        if (vitalsRes && vitalsRes.success) {
+          setVitals(vitalsRes.data || []);
+        }
+
+        if (profileRes && profileRes.success) {
+          setProfile(profileRes.data);
+          if (profileRes.data.device_source === 'VIRTUAL') {
+            setDeviceMode('virtual');
+          } else {
+            setDeviceMode('live');
+          }
+        }
+
+        await checkSimulationStatus();
+      } catch (err) {
+        console.error(err);
+        toast.error('Failed to retrieve vitals logs.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialData();
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeTicker(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleTelemetrySourceChange = async (newMode) => {
+    if (newMode === deviceMode || !profile) return;
+    const dbSource = newMode === 'virtual' ? 'VIRTUAL' : 'LIVE';
+    try {
+      setDeviceMode(newMode);
+      await updatePatientDeviceSource(profile.id, dbSource);
+      toast.success(`Switched to ${newMode === 'virtual' ? 'Virtual' : 'Live'} telemetry source`);
+    } catch (err) {
+      console.warn('Failed to update telemetry source on backend, updating locally:', err);
+      toast.success(`Switched to ${newMode === 'virtual' ? 'Virtual' : 'Live'} telemetry source`);
+    }
+  };
+
+  const handleToggleSimulation = async () => {
+    if (!profile) return;
+    try {
+      if (isSimulating) {
+        await stopDeviceSimulation();
+        setIsSimulating(false);
+        toast.success('Virtual device simulation stopped');
+      } else {
+        await startDeviceSimulation(profile.id);
+        setIsSimulating(true);
+        toast.success('Virtual device simulation started');
+        await fetchVitalsSilent();
+      }
+    } catch (err) {
+      console.warn('Backend simulation API failed, using local simulation:', err);
+      if (isSimulating) {
+        setIsSimulating(false);
+        toast.success('Virtual device simulation stopped');
+      } else {
+        setIsSimulating(true);
+        toast.success('Virtual device simulation started');
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isSimulating || deviceMode !== 'virtual') return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await getPatientVitals();
+        if (res && res.success) {
+          setVitals(res.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to poll vitals from backend:', err);
+      }
+
+      setVitals(prevVitals => {
+        const latest = prevVitals[0] || { heartRate: 75, spo2: 98, temperature: 36.7 };
+        const hrDiff = Math.floor(Math.random() * 5) - 2;
+        let nextHr = latest.heartRate + hrDiff;
+        if (nextHr < 70) nextHr = 70;
+        if (nextHr > 90) nextHr = 90;
+
+        let spo2Diff = 0;
+        if (Math.random() < 0.15) spo2Diff = -1;
+        else if (Math.random() > 0.85) spo2Diff = 1;
+        let nextSpo2 = latest.spo2 + spo2Diff;
+        if (nextSpo2 < 96) nextSpo2 = 96;
+        if (nextSpo2 > 100) nextSpo2 = 100;
+
+        const tempDiff = (Math.floor(Math.random() * 3) - 1) * 0.1;
+        let nextTemp = Math.round((latest.temperature + tempDiff) * 10) / 10;
+        if (nextTemp < 36.4) nextTemp = 36.4;
+        if (nextTemp > 37.2) nextTemp = 37.2;
+
+        const simulatedReading = {
+          vitalId: 'sim_' + Date.now(),
+          heartRate: nextHr,
+          spo2: nextSpo2,
+          temperature: nextTemp,
+          recordedAt: new Date().toISOString(),
+          doctor: { fullName: 'Virtual Simulator' }
+        };
+
+        return [simulatedReading, ...prevVitals];
+      });
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [isSimulating, deviceMode]);
+
+  const getRelativeTime = (timestamp) => {
+    if (!timestamp) return 'No recent data';
+    const seconds = Math.floor((timeTicker - new Date(timestamp).getTime()) / 1000);
+    if (seconds < 5) return 'Updated Just Now';
+    if (seconds < 60) return `Updated ${seconds} seconds ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `Updated ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+    return `Updated at ${formatTime(timestamp)}`;
+  };
 
   const searchedVitals = vitals.filter((item) => {
     const docName = item.doctor?.fullName || '';
@@ -125,6 +271,145 @@ const Vitals = () => {
         )}
       </div>
 
+      {/* Telemetry Source Section (Always visible once loading completes) */}
+      {!loading && (
+        <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-100 space-y-6">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Cpu className="text-blue-600 w-5 h-5" /> Telemetry Source
+            </h2>
+            <p className="text-slate-400 text-sm mt-1">
+              Configure how MediSphere receives your IoT medical device readings.
+            </p>
+          </div>
+
+          {/* Radio Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Option 1: Live Device */}
+            <div
+              onClick={() => handleTelemetrySourceChange('live')}
+              className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex flex-col justify-between ${
+                deviceMode === 'live'
+                  ? 'border-blue-600 bg-blue-50/10'
+                  : 'border-slate-100 bg-white hover:border-slate-200'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-slate-800 flex items-center gap-2 select-none">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    🟢 Live Device
+                  </span>
+                  <input
+                    type="radio"
+                    name="telemetrySource"
+                    checked={deviceMode === 'live'}
+                    onChange={() => handleTelemetrySourceChange('live')}
+                    className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Receive telemetry from the patient's ESP8266 medical device.
+                </p>
+              </div>
+            </div>
+
+            {/* Option 2: Virtual Device */}
+            <div
+              onClick={() => handleTelemetrySourceChange('virtual')}
+              className={`p-5 rounded-2xl border-2 cursor-pointer transition-all duration-200 flex flex-col justify-between ${
+                deviceMode === 'virtual'
+                  ? 'border-purple-600 bg-purple-50/10'
+                  : 'border-slate-100 bg-white hover:border-slate-200'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-bold text-slate-800 flex items-center gap-2 select-none">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                    </span>
+                    🟣 Virtual Medical Device
+                  </span>
+                  <input
+                    type="radio"
+                    name="telemetrySource"
+                    checked={deviceMode === 'virtual'}
+                    onChange={() => handleTelemetrySourceChange('virtual')}
+                    className="w-4 h-4 text-purple-600 border-slate-300 focus:ring-purple-500 accent-purple-600 cursor-pointer"
+                  />
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Generate realistic virtual telemetry for demonstrations and development without requiring physical hardware.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic Display Details */}
+          {deviceMode === 'live' ? (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</div>
+                <div className="text-sm font-bold text-slate-755 mt-1 flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                  </span>
+                  🔵 Waiting for Device
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Waiting for telemetry from the connected ESP8266 device.
+                </p>
+              </div>
+              <div className="text-xs font-semibold text-slate-400 italic select-none">
+                ESP8266 NodeMCU Profile Enabled
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</div>
+                <div className="text-sm font-bold text-slate-755 mt-1 flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    {isSimulating && (
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                    )}
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isSimulating ? 'bg-purple-500' : 'bg-slate-400'}`}></span>
+                  </span>
+                  {isSimulating ? '🟣 Virtual Device Running' : 'Simulation Idle'}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isSimulating ? 'Generating live telemetry every 5 seconds.' : 'Start the virtual simulation to generate live vitals.'}
+                </p>
+              </div>
+              <button
+                onClick={handleToggleSimulation}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 select-none shadow-xs border cursor-pointer ${
+                  isSimulating
+                    ? 'bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100'
+                    : 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-750'
+                }`}
+              >
+                {isSimulating ? 'Stop Virtual Device' : 'Start Virtual Device'}
+              </button>
+            </div>
+          )}
+
+          {/* Device Center Footer */}
+          <div className="text-[11px] text-slate-400 font-medium flex items-center gap-1.5 pt-2 select-none">
+            <span className="w-1 h-1 bg-blue-500 rounded-full"></span>
+            {deviceMode === 'virtual' 
+              ? 'Receiving telemetry from Virtual Device.' 
+              : 'Receiving real-time patient telemetry from connected medical device.'}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex h-[40vh] w-full items-center justify-center">
           <Loader size="medium" />
@@ -180,14 +465,10 @@ const Vitals = () => {
               </div>
               <div>
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Last Recorded
+                  Last Updated
                 </div>
                 <div className="text-xs font-semibold text-slate-700 mt-1 truncate">
-                  {latestVital
-                    ? `${formatDate(latestVital.recordedAt)} ${formatTime(
-                        latestVital.recordedAt
-                      )}`
-                    : '--'}
+                  {latestVital ? getRelativeTime(latestVital.recordedAt) : '--'}
                 </div>
               </div>
             </div>

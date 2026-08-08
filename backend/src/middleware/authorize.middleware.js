@@ -1,11 +1,3 @@
-/**
- * Reusable Role-Based Authorization Middleware Factory.
- * Checks if the user's role exists in the allowed roles.
- * Expects req.user.role to be populated by authMiddleware.
- * 
- * @param {...string} allowedRoles - List of permitted roles.
- * @returns {Function} Express middleware.
- */
 const authorize = (...allowedRoles) => {
   return (req, res, next) => {
     try {
