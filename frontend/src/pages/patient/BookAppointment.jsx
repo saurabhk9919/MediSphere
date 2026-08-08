@@ -8,6 +8,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { getDoctors } from '../../services/doctor.api';
 import { bookAppointment } from '../../services/appointment.api';
+import { getPatientVitals } from '../../services/vital.api';
 import toast from 'react-hot-toast';
 
 const BookingForm = ({ doctor, onClose, onBookingSuccess }) => {
@@ -36,16 +37,47 @@ const BookingForm = ({ doctor, onClose, onBookingSuccess }) => {
     setDeviceError(null);
   };
 
-  const handleCaptureReading = () => {
+  const handleCaptureReading = async () => {
     setCapturing(true);
     setCapturedVitals(null);
     setDeviceError(null);
-    const delay = snapshotOption === 'live' ? 1800 : 800;
-    setTimeout(() => {
-      if (snapshotOption === 'live') {
-        setDeviceError('No ESP8266 hardware device detected. Please ensure your device is powered on, connected to the internet, and sending vitals.');
-        toast.error('Hardware device not found.');
-      } else {
+
+    if (snapshotOption === 'live') {
+      try {
+        // Wait 1.5 seconds to simulate communicating with the device
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        
+        const res = await getPatientVitals();
+        if (res && res.success && res.data && res.data.length > 0) {
+          const latest = res.data[0];
+          // Check if the reading is fresh (recorded within the last 60 seconds)
+          const ageMs = Date.now() - new Date(latest.recordedAt).getTime();
+          if (ageMs < 60000) {
+            setCapturedVitals({
+              heartRate: latest.heartRate,
+              spo2: latest.spo2,
+              temperature: latest.temperature,
+              recordedAt: latest.recordedAt,
+              source: 'Live Device',
+            });
+            toast.success('Live telemetry vitals captured successfully!');
+          } else {
+            setDeviceError('No recent vitals found. Please make sure your ESP8266 device is turned on, connected to WiFi, and actively transmitting.');
+            toast.error('No recent vitals found.');
+          }
+        } else {
+          setDeviceError('No vitals data found on the server. Please ensure your ESP8266 device has successfully sent readings.');
+          toast.error('No vitals data found.');
+        }
+      } catch (err) {
+        console.error(err);
+        setDeviceError('Failed to retrieve live vitals from server.');
+        toast.error('Failed to communicate with server.');
+      } finally {
+        setCapturing(false);
+      }
+    } else {
+      setTimeout(() => {
         const hr = Math.floor(Math.random() * 21) + 70; // 70-90
         const o2 = Math.floor(Math.random() * 5) + 96;  // 96-100
         const temp = Math.round((Math.random() * 0.8 + 36.4) * 10) / 10; // 36.4-37.2
@@ -56,9 +88,10 @@ const BookingForm = ({ doctor, onClose, onBookingSuccess }) => {
           recordedAt: new Date().toISOString(),
           source: 'Virtual Medical Device',
         });
-      }
-      setCapturing(false);
-    }, delay);
+        toast.success('Simulated vitals captured!');
+        setCapturing(false);
+      }, 800);
+    }
   };
 
   const onSubmit = async (data) => {

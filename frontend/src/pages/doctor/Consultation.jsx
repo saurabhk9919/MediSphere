@@ -41,6 +41,7 @@ const Consultation = () => {
   // Prescription status
   const [prescriptionIssued, setPrescriptionIssued] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [timeTicker, setTimeTicker] = useState(Date.now());
 
   const fetchConsultationData = async () => {
     try {
@@ -121,9 +122,16 @@ const Consultation = () => {
     }
   }, [appointmentId]);
 
-  // Handle telemetry refresh polling when Virtual Device is simulating
   useEffect(() => {
-    if (deviceMode !== 'virtual' || !appointment?.patient?.id) return;
+    const interval = setInterval(() => {
+      setTimeTicker(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle telemetry refresh polling (both Virtual Device and Live Device telemetry)
+  useEffect(() => {
+    if (!appointment?.patient?.id) return;
 
     const intervalId = setInterval(() => {
       fetchVitalsSilent();
@@ -132,7 +140,7 @@ const Consultation = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [deviceMode, appointment]);
+  }, [appointment]);
 
   const handleDeviceModeChange = async (newMode) => {
     if (newMode === deviceMode || !appointment?.patient?.id) return;
@@ -314,6 +322,19 @@ const Consultation = () => {
   };
 
   const latestVital = vitals[0];
+
+  const isTelemetryFresh = () => {
+    if (!latestVital) return false;
+    const ageMs = timeTicker - new Date(latestVital.recordedAt).getTime();
+    return ageMs < 15000; // Fresh if received in the last 15 seconds
+  };
+
+  const getRelativeTelemetryTime = () => {
+    if (!latestVital) return '';
+    const diffSec = Math.floor((timeTicker - new Date(latestVital.recordedAt).getTime()) / 1000);
+    if (diffSec < 5) return 'just now';
+    return `${diffSec} seconds ago`;
+  };
 
   if (loading) {
     return (
@@ -535,8 +556,22 @@ const Consultation = () => {
                   <span className="text-xl font-extrabold text-slate-800">{latestVital.temperature}°C</span>
                 </div>
                 <div className="col-span-3 flex justify-between text-[10px] text-slate-400 font-semibold px-1 mt-1 select-none">
-                  <span>Simulation Telemetry active</span>
-                  <span>Last updated: {formatTime(latestVital.recordedAt)}</span>
+                  {deviceMode === 'virtual' ? (
+                    <>
+                      <span>Simulation Telemetry active</span>
+                      <span>Last updated: {formatTime(latestVital.recordedAt)}</span>
+                    </>
+                  ) : isTelemetryFresh() ? (
+                    <>
+                      <span className="text-emerald-600 font-bold">🟢 Live Telemetry active (received {getRelativeTelemetryTime()})</span>
+                      <span>Last updated: {formatTime(latestVital.recordedAt)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-blue-600 font-bold">🔵 Waiting for Device (no recent readings)</span>
+                      <span>Stale since: {formatTime(latestVital.recordedAt)}</span>
+                    </>
+                  )}
                 </div>
               </div>
             )}

@@ -260,6 +260,81 @@ const updateDeviceSource = async (req, res, next) => {
   }
 };
 
+const recordDeviceTelemetry = async (req, res, next) => {
+  try {
+    const deviceIdHeader = req.headers["x-device-id"];
+    const deviceApiKeyHeader = req.headers["x-device-api-key"];
+
+    const expectedDeviceId = process.env.DEVICE_ID;
+    const expectedDeviceApiKey = process.env.DEVICE_API_KEY;
+
+    if (!deviceIdHeader || !deviceApiKeyHeader || deviceIdHeader !== expectedDeviceId || deviceApiKeyHeader !== expectedDeviceApiKey) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid device credentials"
+      });
+    }
+
+    const { patientId, heartRate, spo2, temperature } = req.body;
+
+    if (patientId === undefined || patientId === null) {
+      return res.status(400).json({
+        success: false,
+        message: "patientId is required"
+      });
+    }
+
+    if (heartRate === undefined || heartRate === null || typeof heartRate !== "number" || heartRate < 20 || heartRate > 250) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid heartRate. Must be a number between 20 and 250"
+      });
+    }
+
+    if (spo2 === undefined || spo2 === null || typeof spo2 !== "number" || spo2 < 0 || spo2 > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid spo2. Must be a number between 0 and 100"
+      });
+    }
+
+    if (temperature === undefined || temperature === null || typeof temperature !== "number" || temperature < 25 || temperature > 45) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid temperature. Must be a number between 25 and 45"
+      });
+    }
+
+    const result = await vitalService.recordDeviceTelemetry(req.body);
+
+    if (result.notFound) {
+      return res.status(404).json({
+        success: false,
+        message: "Patient not found"
+      });
+    }
+
+    if (result.noAppointment) {
+      return res.status(400).json({
+        success: false,
+        message: "No appointment found for this patient to link telemetry data"
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Vital recorded successfully",
+      data: result.vitals
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error while recording telemetry vitals",
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   recordVitals,
   getPatientVitals,
@@ -269,5 +344,6 @@ module.exports = {
   startDeviceSimulation,
   stopDeviceSimulation,
   getDeviceSimulationStatus,
-  updateDeviceSource
+  updateDeviceSource,
+  recordDeviceTelemetry
 };

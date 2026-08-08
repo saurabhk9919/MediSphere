@@ -51,6 +51,58 @@ class VitalService {
     const insertQuery = `
       INSERT INTO vitals (appointment_id, heart_rate, spo2, body_temperature, captured_at)
       VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (appointment_id)
+      DO UPDATE SET
+        heart_rate = EXCLUDED.heart_rate,
+        spo2 = EXCLUDED.spo2,
+        body_temperature = EXCLUDED.body_temperature,
+        captured_at = NOW()
+      RETURNING *;
+    `;
+    const insertResult = await pool.query(insertQuery, [
+      appointmentId,
+      heartRate,
+      spo2,
+      temperature
+    ]);
+
+    return { success: true, vitals: insertResult.rows[0] };
+  }
+
+  async recordDeviceTelemetry(vitalsData) {
+    const { patientId, heartRate, spo2, temperature } = vitalsData;
+
+    const patientQuery = "SELECT id FROM patients WHERE user_id = $1 OR id = $1 LIMIT 1;";
+    const patientResult = await pool.query(patientQuery, [patientId]);
+
+    if (patientResult.rows.length === 0) {
+      return { notFound: true };
+    }
+    const patientIdDb = patientResult.rows[0].id;
+
+    // Get the latest appointment for this patient to attach the vitals to
+    const apptQuery = `
+      SELECT id FROM appointments
+      WHERE patient_id = $1
+      ORDER BY appointment_date DESC, id DESC
+      LIMIT 1;
+    `;
+    const apptResult = await pool.query(apptQuery, [patientIdDb]);
+    
+    if (apptResult.rows.length === 0) {
+      return { noAppointment: true };
+    }
+    const appointmentId = apptResult.rows[0].id;
+
+    const insertQuery = `
+      INSERT INTO vitals (appointment_id, heart_rate, spo2, body_temperature, captured_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (appointment_id)
+      DO UPDATE SET
+        heart_rate = EXCLUDED.heart_rate,
+        spo2 = EXCLUDED.spo2,
+        body_temperature = EXCLUDED.body_temperature,
+        captured_at = NOW()
       RETURNING *;
     `;
     const insertResult = await pool.query(insertQuery, [

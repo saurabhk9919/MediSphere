@@ -107,9 +107,45 @@ const Appointments = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setTimeTicker(Date.now());
-    }, 10000);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const isTelemetryFresh = (vital) => {
+    if (!vital) return false;
+    const ageMs = Date.now() - new Date(vital.recordedAt).getTime();
+    return ageMs < 15000; // Fresh if received in the last 15 seconds
+  };
+
+  // Poll for latest vitals when the consultation modal is open
+  useEffect(() => {
+    if (!selectedConsultation) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await getDoctorAppointments();
+        if (res && res.success) {
+          const updatedAppt = res.data.find(
+            (a) => String(a.appointmentId) === String(selectedConsultation.appointmentId)
+          );
+          if (updatedAppt) {
+            setSelectedConsultation((prev) => {
+              if (!prev) return null;
+              return {
+                ...prev,
+                latestVital: updatedAppt.latestVital,
+                patient: updatedAppt.patient
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to poll latest vitals in appointments modal:', err);
+      }
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [selectedConsultation]);
 
   const getRelativeTime = (recordedAt) => {
     if (!recordedAt) return '';
@@ -597,11 +633,15 @@ const Appointments = () => {
                 </h3>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border ${selectedConsultation.patient?.deviceSource === 'VIRTUAL'
                     ? 'bg-purple-50 text-purple-700 border-purple-100'
-                    : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                    : isTelemetryFresh(selectedConsultation.latestVital)
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                      : 'bg-blue-50 text-blue-700 border-blue-100 animate-pulse'
                   }`}>
                   {selectedConsultation.patient?.deviceSource === 'VIRTUAL'
                     ? 'Virtual Medical Device'
-                    : 'Live Device'}
+                    : isTelemetryFresh(selectedConsultation.latestVital)
+                      ? '🟢 Live Device'
+                      : '🔵 Waiting for Device'}
                 </span>
               </div>
 

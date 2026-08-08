@@ -123,7 +123,8 @@ const Vitals = () => {
   };
 
   useEffect(() => {
-    if (!isSimulating || deviceMode !== 'virtual') return;
+    const shouldPoll = (deviceMode === 'virtual' && isSimulating) || deviceMode === 'live';
+    if (!shouldPoll) return;
 
     const intervalId = setInterval(async () => {
       try {
@@ -135,36 +136,38 @@ const Vitals = () => {
         console.error('Failed to poll vitals from backend:', err);
       }
 
-      setVitals(prevVitals => {
-        const latest = prevVitals[0] || { heartRate: 75, spo2: 98, temperature: 36.7 };
-        const hrDiff = Math.floor(Math.random() * 5) - 2;
-        let nextHr = latest.heartRate + hrDiff;
-        if (nextHr < 70) nextHr = 70;
-        if (nextHr > 90) nextHr = 90;
+      if (deviceMode === 'virtual' && isSimulating) {
+        setVitals(prevVitals => {
+          const latest = prevVitals[0] || { heartRate: 75, spo2: 98, temperature: 36.7 };
+          const hrDiff = Math.floor(Math.random() * 5) - 2;
+          let nextHr = latest.heartRate + hrDiff;
+          if (nextHr < 70) nextHr = 70;
+          if (nextHr > 90) nextHr = 90;
 
-        let spo2Diff = 0;
-        if (Math.random() < 0.15) spo2Diff = -1;
-        else if (Math.random() > 0.85) spo2Diff = 1;
-        let nextSpo2 = latest.spo2 + spo2Diff;
-        if (nextSpo2 < 96) nextSpo2 = 96;
-        if (nextSpo2 > 100) nextSpo2 = 100;
+          let spo2Diff = 0;
+          if (Math.random() < 0.15) spo2Diff = -1;
+          else if (Math.random() > 0.85) spo2Diff = 1;
+          let nextSpo2 = latest.spo2 + spo2Diff;
+          if (nextSpo2 < 96) nextSpo2 = 96;
+          if (nextSpo2 > 100) nextSpo2 = 100;
 
-        const tempDiff = (Math.floor(Math.random() * 3) - 1) * 0.1;
-        let nextTemp = Math.round((latest.temperature + tempDiff) * 10) / 10;
-        if (nextTemp < 36.4) nextTemp = 36.4;
-        if (nextTemp > 37.2) nextTemp = 37.2;
+          const tempDiff = (Math.floor(Math.random() * 3) - 1) * 0.1;
+          let nextTemp = Math.round((latest.temperature + tempDiff) * 10) / 10;
+          if (nextTemp < 36.4) nextTemp = 36.4;
+          if (nextTemp > 37.2) nextTemp = 37.2;
 
-        const simulatedReading = {
-          vitalId: 'sim_' + Date.now(),
-          heartRate: nextHr,
-          spo2: nextSpo2,
-          temperature: nextTemp,
-          recordedAt: new Date().toISOString(),
-          doctor: { fullName: 'Virtual Simulator' }
-        };
+          const simulatedReading = {
+            vitalId: 'sim_' + Date.now(),
+            heartRate: nextHr,
+            spo2: nextSpo2,
+            temperature: nextTemp,
+            recordedAt: new Date().toISOString(),
+            doctor: { fullName: 'Virtual Simulator' }
+          };
 
-        return [simulatedReading, ...prevVitals];
-      });
+          return [simulatedReading, ...prevVitals];
+        });
+      }
     }, 5000);
 
     return () => clearInterval(intervalId);
@@ -249,6 +252,19 @@ const Vitals = () => {
   };
 
   const latestVital = vitals[0];
+
+  const isTelemetryFresh = () => {
+    if (!latestVital) return false;
+    const ageMs = timeTicker - new Date(latestVital.recordedAt).getTime();
+    return ageMs < 15000; // Fresh if received in the last 15 seconds
+  };
+
+  const getRelativeTelemetryTime = () => {
+    if (!latestVital) return '';
+    const diffSec = Math.floor((timeTicker - new Date(latestVital.recordedAt).getTime()) / 1000);
+    if (diffSec < 5) return 'just now';
+    return `${diffSec} seconds ago`;
+  };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -356,14 +372,28 @@ const Vitals = () => {
               <div>
                 <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status</div>
                 <div className="text-sm font-bold text-slate-755 mt-1 flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                  </span>
-                  🔵 Waiting for Device
+                  {isTelemetryFresh() ? (
+                    <>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span className="text-emerald-700">🟢 Live Device</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                      </span>
+                      <span className="text-blue-700">🔵 Waiting for Device</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Waiting for telemetry from the connected ESP8266 device.
+                  {isTelemetryFresh() 
+                    ? `Last reading received ${getRelativeTelemetryTime()}.`
+                    : 'Waiting for telemetry from the connected ESP8266 device.'}
                 </p>
               </div>
               <div className="text-xs font-semibold text-slate-400 italic select-none">
